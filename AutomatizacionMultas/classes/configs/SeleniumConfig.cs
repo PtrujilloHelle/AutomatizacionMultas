@@ -13,9 +13,13 @@ namespace AutomatizacionMultas.classes.configs
         public SeleniumConfig() { }
         public SeleniumOptionsConfig SeleniumOptions { get; set; } = default!;
     }
+
     public class SeleniumOptionsConfig
     {
         public bool Headless { get; set; }
         public string DownloadTempDirPath { get; set; } = string.Empty;
+
+        // NUEVO: timeout configurable para WebDriverWait (segundos)
+        public int DefaultTimeoutSec { get; set; } = 20;
     }
 }

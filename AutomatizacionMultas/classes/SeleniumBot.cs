@@ -31,7 +31,10 @@ namespace AutomatizacionMultas.classes
         protected SeleniumBot(TConfig cfg, int defaultTimeoutSec = 20)
         {
             Config = cfg ?? throw new ArgumentNullException(nameof(cfg));
-            _defaultTimeoutSec = defaultTimeoutSec;
+
+            // Usa el timeout de configuración si es > 0, si no usa el parámetro por defecto.
+            var cfgTimeout = cfg.SeleniumOptions != null ? cfg.SeleniumOptions.DefaultTimeoutSec : defaultTimeoutSec;
+            _defaultTimeoutSec = (cfgTimeout > 0) ? cfgTimeout : defaultTimeoutSec;
         }
 
         /* ───────────── PUBLIC LIFECYCLE ───────────── */
@@ -75,6 +78,13 @@ namespace AutomatizacionMultas.classes
                 opts.AddArgument("--headless=new");
             else
                 opts.AddArgument("--start-maximized");
+
+            // Opcional: flags útiles en Linux/CI
+            if (OperatingSystem.IsLinux())
+            {
+                opts.AddArgument("--no-sandbox");
+                opts.AddArgument("--disable-dev-shm-usage");
+            }
 
             return opts;
         }
