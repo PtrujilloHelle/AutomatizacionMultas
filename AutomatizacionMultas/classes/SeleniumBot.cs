@@ -12,6 +12,10 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
+// 👇 NUEVO
+using System.Text.Json;
+using Cookie = OpenQA.Selenium.Cookie;
+
 namespace AutomatizacionMultas.classes
 {
     /// <summary>Base class that hides all Selenium plumbing.</summary>
@@ -49,11 +53,7 @@ namespace AutomatizacionMultas.classes
             opts.AddArgument("--disable-blink-features=AutomationControlled");
             opts.AddUserProfilePreference("plugins.always_open_pdf_externally", true);
 
-            /* --------- CARPETA DE DESCARGAS CONSISTENTE ---------
-             * 1. Si el Config tiene SaveOptions → usa DownloadDir.
-             * 2. Si no, usa DownloadTempDirPath (si existe).
-             * Esto garantiza que WaitNewZip mira la carpeta correcta.
-             */
+            /* --------- CARPETA DE DESCARGAS CONSISTENTE --------- */
             string? downloadDir = null;
 
             if (Config is DescargaDeMultasConfig dmCfg)
@@ -84,6 +84,7 @@ namespace AutomatizacionMultas.classes
             var options = BuildChromeOptions();
             Driver = new ChromeDriver(options);
             Wait = new WebDriverWait(Driver, TimeSpan.FromSeconds(_defaultTimeoutSec));
+            Driver.Manage().Timeouts().ImplicitWait = TimeSpan.Zero; // recomendado
         }
 
         /* ───────────── ABSTRACT ───────────── */
@@ -116,7 +117,7 @@ namespace AutomatizacionMultas.classes
 
         public string SafeText(string t) => (t ?? "").Trim();
 
-        public string WaitNewZip(string folder, HashSet<string> previous, TimeSpan timeout)
+        public string? WaitNewZip(string folder, HashSet<string> previous, TimeSpan timeout)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             while (sw.Elapsed < timeout)
@@ -142,7 +143,7 @@ namespace AutomatizacionMultas.classes
             return Regex.Replace(clean, @"\s+", " ").Trim();
         }
 
-        /* ----- NUEVO: evita colisiones de nombre ----- */
+        /* ----- Evita colisiones de nombre ----- */
         protected static string EnsureUniquePath(string path)
         {
             string dir = Path.GetDirectoryName(path)!;
@@ -165,6 +166,84 @@ namespace AutomatizacionMultas.classes
                 catch { Thread.Sleep(delayMs); }
             }
             File.Move(src, dst);
+        }
+
+        /* ───────────── COOKIES (NUEVO) ───────────── */
+
+        public record SerializableCookie
+        {
+            public string Name { get; init; } = "";
+            public string Value { get; init; } = "";
+            public string Domain { get; init; } = "";
+            public string Path { get; init; } = "/";
+            public DateTime? Expiry { get; init; }
+
+            public SerializableCookie() { }
+            public SerializableCookie(Cookie c)
+            {
+                Name = c.Name;
+                Value = c.Value;
+                Domain = c.Domain;
+                Path = c.Path;
+                Expiry = c.Expiry;
+            }
+
+            public Cookie ToSeleniumCookie() => new Cookie(Name, Value, Domain, Path, Expiry);
+        }
+
+        /// <summary>Guarda todas las cookies actuales del dominio en un JSON.</summary>
+        public void SaveCookies(string path)
+        {
+            try
+            {
+                var cookies = Driver.Manage().Cookies.AllCookies.Select(c => new SerializableCookie(c)).ToList();
+                var dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
+                File.WriteAllText(path, JsonSerializer.Serialize(cookies, new JsonSerializerOptions { WriteIndented = true }));
+                Console.WriteLine($"🍪 Cookies guardadas en {path}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error guardando cookies: {ex.Message}");
+            }
+        }
+
+        /// <summary>Carga cookies desde JSON para el dominio de baseUrl.</summary>
+        public void LoadCookies(string path, string baseUrl)
+        {
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    Console.WriteLine("⚠️ No hay cookies guardadas.");
+                    return;
+                }
+
+                // Navega al origen del dominio antes de inyectar
+                Driver.Navigate().GoToUrl(GetOrigin(baseUrl));
+                Driver.Manage().Cookies.DeleteAllCookies();
+
+                var json = File.ReadAllText(path);
+                var cookies = JsonSerializer.Deserialize<List<SerializableCookie>>(json) ?? new();
+
+                int ok = 0, fail = 0;
+                foreach (var sc in cookies)
+                {
+                    try { Driver.Manage().Cookies.AddCookie(sc.ToSeleniumCookie()); ok++; }
+                    catch { fail++; }
+                }
+                Console.WriteLine($"✅ Cookies cargadas: {ok} (fallidas: {fail}).");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error cargando cookies: {ex.Message}");
+            }
+        }
+
+        protected static string GetOrigin(string url)
+        {
+            var uri = new Uri(url);
+            return $"{uri.Scheme}://{uri.Host}";
         }
 
         /* ───────────── DISPOSE ───────────── */

@@ -2,7 +2,6 @@
 
 using AutomatizacionMultas.classes.configs;
 using OpenQA.Selenium;
-using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Support.UI;
 using System;
 using System.Collections.Generic;
@@ -10,17 +9,14 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
 using UglyToad.PdfPig;
 
 namespace AutomatizacionMultas.classes.bots
 {
     internal class DescargaDeMultas : SeleniumBot<DescargaDeMultasConfig>
     {
-        // ↓ Solo utilidades internas (no config):
         private static readonly Random Rnd = new();
 
         public DescargaDeMultas(DescargaDeMultasConfig cfg) : base(cfg)
@@ -30,14 +26,54 @@ namespace AutomatizacionMultas.classes.bots
 
         public void EnsureDirectoryExists()
         {
-            // Directorios garantizados
             Directory.CreateDirectory(Config.SaveOptions.PdfRoot);
             Directory.CreateDirectory(Config.SaveOptions.DownloadDir);
         }
 
-        // -----------------------------------------------------------------
-        // --------------------  MÉTODOS AUXILIARES  ------------------------
-        // -----------------------------------------------------------------
+        /* ===================== COOKIES / LOGIN FLOW ===================== */
+
+        // Guardamos cookies en la CARPETA DE LA APP (junto al .exe):
+        private string CookieFilePath =>
+            Path.Combine(AppContext.BaseDirectory, "cookies", "pyramid.json");
+
+        private bool IsLoggedIn()
+        {
+            try
+            {
+                // Enlace que solo aparece tras el login (ajústalo si cambia)
+                return Driver.FindElements(By.XPath("//a[@title='Sedes electronicas']")).Count > 0;
+            }
+            catch { return false; }
+        }
+
+        private void EnsureLoggedIn()
+        {
+            // 1) Intentar restaurar sesión con cookies
+            LoadCookies(CookieFilePath, Config.PyramidConnection.Url);
+            Driver.Navigate().GoToUrl(Config.PyramidConnection.Url);
+            HumanPause(800, 1300);
+
+            if (IsLoggedIn())
+            {
+                Console.WriteLine("✅ Sesión restaurada mediante cookies.");
+                return;
+            }
+
+            // 2) Login manual + guardado de cookies
+            Console.WriteLine("ℹ️ Cookies no válidas/ausentes. Realizando login…");
+            LoginStep();
+
+            try
+            {
+                new WebDriverWait(Driver, TimeSpan.FromSeconds(20))
+                    .Until(d => d.FindElements(By.XPath("//a[@title='Sedes electronicas']")).Count > 0);
+            }
+            catch { /* si falla, lo detectaremos después */ }
+
+            SaveCookies(CookieFilePath);
+        }
+
+        /* ===================== LÓGICA PROPIA BOT ===================== */
 
         string? ExtractZip(string zipPath)
         {
@@ -56,7 +92,7 @@ namespace AutomatizacionMultas.classes.bots
                     Config.SaveOptions.PdfRoot,
                     Path.GetFileNameWithoutExtension(zipPath) + ".pdf");
 
-                destPdf = EnsureUniquePath(destPdf);               // ⬅️ evita sobrescribir
+                destPdf = EnsureUniquePath(destPdf);
                 Directory.CreateDirectory(Path.GetDirectoryName(destPdf)!);
                 pdfEntry.ExtractToFile(destPdf, overwrite: false);
                 return destPdf;
@@ -67,13 +103,12 @@ namespace AutomatizacionMultas.classes.bots
                     Config.SaveOptions.PdfRoot,
                     Path.GetFileNameWithoutExtension(zipPath));
 
-                subDir = EnsureUniquePath(subDir);                 // ⬅️ idem para carpeta
+                subDir = EnsureUniquePath(subDir);
                 Directory.CreateDirectory(subDir);
                 ZipFile.ExtractToDirectory(zipPath, subDir, true);
                 return null;
             }
         }
-
 
         void TryRenamePdfByContent(string pdfPath)
         {
@@ -81,7 +116,7 @@ namespace AutomatizacionMultas.classes.bots
             string normalizedStart = NormalizeAggressively(firstText);
 
             if (Config.SaveOptions.ExcludedPdfStarts.Any(pref => normalizedStart.Contains(NormalizeAggressively(pref))))
-                return; // Excluido
+                return;
 
             string fullText = ReadPdfText(pdfPath, false);
             string? plate = FindPlate(fullText);
@@ -102,7 +137,6 @@ namespace AutomatizacionMultas.classes.bots
             File.Move(pdfPath, finalPath);
         }
 
-        // ---- PDF helpers ----
         private string ReadPdfText(string path, bool firstPageOnly)
         {
             var sb = new StringBuilder();
@@ -216,25 +250,24 @@ namespace AutomatizacionMultas.classes.bots
 
         protected override Task ExecuteAsync()
         {
-
-            // ---------- LOGIN ----------
-            LoginStep();
-            HumanPause(1200, 2200);
+            // 1) Garantizar sesión (cookies o login)
+            EnsureLoggedIn();
+            HumanPause(1000, 1500);
 
             try
             {
-                // ---------- MENÚ “NOTIFICACIONES” ----------
+                // 2) Menú y filtros
                 SetUpFilters();
 
-                // ---------- MOSTRAR -> TODOS ----------
+                // 3) Mostrar todos
                 SelectMostrarTodos();
 
-                // ---------- Scroll inicial ----------
+                // 4) Scroll inicial
                 EnsureAllRowsLoadedByScrolling();
 
                 Console.WriteLine("Descargando, descomprimiendo y renombrando…");
 
-                // ---------- Download all ----------
+                // 5) Descarga masiva
                 DownloadProcess();
 
                 Console.WriteLine("🏁 Todo terminado.");
@@ -245,7 +278,6 @@ namespace AutomatizacionMultas.classes.bots
             }
 
             return Task.CompletedTask;
-
         }
 
         private void DownloadProcess()
@@ -283,10 +315,9 @@ namespace AutomatizacionMultas.classes.bots
 
                     SimulateHumanClick(boton);
 
-                    string nuevoZip = WaitNewZip(Config.SaveOptions.DownloadDir, prevZips, TimeSpan.FromSeconds(60));
+                    string? nuevoZip = WaitNewZip(Config.SaveOptions.DownloadDir, prevZips, TimeSpan.FromSeconds(60));
                     if (nuevoZip == null) { Console.WriteLine($"⚠️  Fila {i + 1}: descarga falló."); i++; continue; }
 
-                    // ---------- Nombre final ----------
                     string finalName = !string.IsNullOrWhiteSpace(matricula)
                         ? $"{SanitizeFileName(organismo)}_{SanitizeFileName(matricula)}.zip"
                         : $"{SanitizeFileName(organismo)}_{secuencias.GetValueOrDefault(organismo, 1)}.zip";
@@ -296,11 +327,9 @@ namespace AutomatizacionMultas.classes.bots
                     string finalZipPath = Path.Combine(Config.SaveOptions.DownloadDir, finalName);
                     MoveWithRetry(nuevoZip, finalZipPath, 10, 300);
 
-                    // ---------- Descomprimir ----------
                     string? extractedPdf = ExtractZip(finalZipPath);
                     if (extractedPdf is null) { i++; continue; }
 
-                    // ---------- Renombrar ----------
                     if (!IsExcludedOrganism(organismo))
                         TryRenamePdfByContent(extractedPdf);
                     else
@@ -333,8 +362,6 @@ namespace AutomatizacionMultas.classes.bots
             HumanPause(1500, 2500);
 
             // --- FILTRO DE FECHA ---
-            /* Si FixedDate está vacío ⇒ hoy.
-               Admite tanto "dd/MM/yyyy" como "yyyy-MM-dd". */
             string fechaFija = ParseFixedDate(Config.SaveOptions.FixedDate);
 
             var desdeInput = Wait.Until(d => d.FindElement(By.Id("beginDateCreated")));
@@ -347,23 +374,19 @@ namespace AutomatizacionMultas.classes.bots
             HumanPause(1400, 2000);
         }
 
-        /* Helper privado */
         private static string ParseFixedDate(string? raw)
         {
-            raw = raw?.Trim();                          // ← recorte extra
+            raw = raw?.Trim();
             if (string.IsNullOrEmpty(raw))
                 return DateTime.Today.ToString("dd/MM/yyyy");
 
-            // dd/MM/yyyy
             if (DateTime.TryParseExact(raw, "dd/MM/yyyy", null,
                                        DateTimeStyles.None, out var dt))
                 return dt.ToString("dd/MM/yyyy");
 
-            // yyyy-MM-dd o cualquier formato reconocible
             if (DateTime.TryParse(raw, out dt))
                 return dt.ToString("dd/MM/yyyy");
 
-            // Fallback: hoy
             return DateTime.Today.ToString("dd/MM/yyyy");
         }
 
