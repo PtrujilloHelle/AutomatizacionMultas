@@ -12,6 +12,12 @@ namespace AutomatizacionMultas.classes.bots
     {
         private string? ExtractZip(string zipPath)
         {
+            // Subcarpeta por fecha con guiones
+            string fecha = ParseFixedDate(Config.SaveOptions.FixedDate); // "07/08/2025"
+            string fechaFolder = fecha.Replace('/', '-');                // "07-08-2025"
+            string dateRoot = Path.Combine(Config.SaveOptions.PdfRoot, fechaFolder);
+            Directory.CreateDirectory(dateRoot);
+
             if (Config.SaveOptions.OnePdfPerZip)
             {
                 using var archive = ZipFile.OpenRead(zipPath);
@@ -24,7 +30,7 @@ namespace AutomatizacionMultas.classes.bots
                 }
 
                 string destPdf = Path.Combine(
-                    Config.SaveOptions.PdfRoot,
+                    dateRoot, // <- aquí va la carpeta con guiones
                     Path.GetFileNameWithoutExtension(zipPath) + ".pdf");
 
                 destPdf = EnsureUniquePath(destPdf);
@@ -35,7 +41,7 @@ namespace AutomatizacionMultas.classes.bots
             else
             {
                 string subDir = Path.Combine(
-                    Config.SaveOptions.PdfRoot,
+                    dateRoot, // <- también cuelga del dateRoot
                     Path.GetFileNameWithoutExtension(zipPath));
 
                 subDir = EnsureUniquePath(subDir);
@@ -44,6 +50,7 @@ namespace AutomatizacionMultas.classes.bots
                 return null;
             }
         }
+
 
         private void TryRenamePdfByContent(string pdfPath)
         {

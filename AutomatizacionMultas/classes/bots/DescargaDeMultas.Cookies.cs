@@ -3,6 +3,7 @@ using OpenQA.Selenium.Support.UI;
 using OpenQA.Selenium;
 using System;
 using System.IO;
+using System.Linq; // <- para FirstOrDefault
 
 namespace AutomatizacionMultas.classes.bots
 {
@@ -73,10 +74,38 @@ namespace AutomatizacionMultas.classes.bots
         private void LoginStep()
         {
             Driver.Navigate().GoToUrl(Config.PyramidConnection.Url);
-            SimulateHumanTyping(Wait.Until(d => d.FindElement(By.Name("username"))), Config.PyramidConnection.Username);
-            var passInput = Driver.FindElement(By.Name("password"));
+            HumanPause(600, 1100);
+
+            // Usuario: mover ratón, enfocar, escribir con pausas
+            var userInput = Wait.Until(d => d.FindElement(By.Name("username")));
+            ScrollIntoView(userInput);
+            SimulateHumanClick(userInput);
+            HumanPause(150, 300);
+            SimulateHumanTyping(userInput, Config.PyramidConnection.Username);
+            HumanPause(250, 500);
+
+            // Password: igual que arriba
+            var passInput = Wait.Until(d => d.FindElement(By.Name("password")));
+            ScrollIntoView(passInput);
+            SimulateHumanClick(passInput);
+            HumanPause(150, 300);
             SimulateHumanTyping(passInput, Config.PyramidConnection.Password);
-            passInput.SendKeys(Keys.Enter);
+            HumanPause(250, 500);
+
+            // Envío "humano": preferimos click en botón de submit si existe; si no, Enter
+            var submit = Driver.FindElements(By.CssSelector("button[type='submit'], input[type='submit'], button.btn"))
+                               .FirstOrDefault();
+            if (submit != null)
+            {
+                ScrollIntoView(submit);
+                SimulateHumanClick(submit);
+            }
+            else
+            {
+                passInput.SendKeys(Keys.Enter);
+            }
+
+            HumanPause(1200, 1800);
         }
     }
 }
