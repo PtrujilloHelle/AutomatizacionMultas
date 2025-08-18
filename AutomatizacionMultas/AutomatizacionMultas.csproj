@@ -8,8 +8,19 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<!-- Alineamos TODAS las extensiones a 9.0.8 para evitar NU1605 -->
 		<PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.8" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.7" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.8" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.8" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.8" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.8" />
+		<PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.8" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.8" />
+		<!-- (opcional, por si el IDE insiste) -->
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.8" />
+
+		<!-- Resto de paquetes -->
+		<PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.2" />
 		<PackageReference Include="PdfPig" Version="0.1.11" />
 		<PackageReference Include="Selenium.Support" Version="4.34.0" />
 		<PackageReference Include="Selenium.WebDriver" Version="4.34.0" />
