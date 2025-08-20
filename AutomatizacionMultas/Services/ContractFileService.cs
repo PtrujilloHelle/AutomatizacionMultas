@@ -24,12 +24,52 @@ public sealed class ContractFileService
                   .FirstOrDefault();
     }
 
-    public DirectoryInfo EnsureOutputFolder(string matricula, DateTime fecha, TimeSpan hora)
+    /// <summary>
+    /// Crea carpeta con reglas:
+    /// - Si faltan fecha y hora → MATRICULA-sin fecha ni hora
+    /// - Si falta fecha → MATRICULA-sin fecha-HHMM
+    /// - Si falta hora → MATRICULA-DDMMAAAA-sin hora
+    /// - Si no hay contrato → añade " - contrato no encontrado"
+    /// - Si hay duplicado → añade sufijo (p.ej. "_2") al final del nombre.
+    /// </summary>
+    public DirectoryInfo EnsureOutputFolder(
+        string matricula,
+        DateTime? fecha,
+        TimeSpan? hora,
+        bool contratoNoEncontrado,
+        string? duplicateSuffix)
     {
-        var folderName = $"{matricula}-{fecha:ddMMyyyy}-{hora:hhmm}";
+        string folderName;
+
+        if (!fecha.HasValue && !hora.HasValue)
+        {
+            folderName = $"{matricula}-sin fecha ni hora";
+        }
+        else if (!fecha.HasValue && hora.HasValue)
+        {
+            folderName = $"{matricula}-sin fecha-{hora.Value:hhmm}";
+        }
+        else if (fecha.HasValue && !hora.HasValue)
+        {
+            folderName = $"{matricula}-{fecha.Value:ddMMyyyy}-sin hora";
+        }
+        else
+        {
+            folderName = $"{matricula}-{fecha!.Value:ddMMyyyy}-{hora!.Value:hhmm}";
+        }
+
+        if (contratoNoEncontrado)
+        {
+            folderName += " - contrato no encontrado";
+        }
+
+        if (!string.IsNullOrWhiteSpace(duplicateSuffix))
+        {
+            folderName += duplicateSuffix; // p.ej. "_2"
+        }
+
         return Directory.CreateDirectory(Path.Combine(_outputRoot, folderName));
     }
-
 
     public FileInfo? CopyIfExists(string? srcPath, DirectoryInfo destDir, string? overrideName = null)
     {
