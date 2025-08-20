@@ -51,6 +51,7 @@ namespace AutomatizacionMultas.classes.bots
             }
         }
 
+        /* ===================== RENOMBRADOS ===================== */
 
         private void TryRenamePdfByContent(string pdfPath)
         {
@@ -64,6 +65,21 @@ namespace AutomatizacionMultas.classes.bots
             string? plate = FindPlate(fullText);
             if (plate is null) return;
 
+            RenameWithPlate(pdfPath, plate);
+        }
+
+        // *** ESPECIAL BENALMÁDENA ***
+        private void TryRenamePdfByContentBenalmadena(string pdfPath)
+        {
+            string fullText = ReadPdfText(pdfPath, false);
+            string? plate = FindPlateBenalmadena(fullText);
+            if (plate is null) return;
+
+            RenameWithPlate(pdfPath, plate);
+        }
+
+        private static void RenameWithPlate(string pdfPath, string plate)
+        {
             string dir = Path.GetDirectoryName(pdfPath)!;
             string baseName = Regex.Replace(Path.GetFileNameWithoutExtension(pdfPath), @"_(\d+)$", "");
             string newName = $"{baseName}_{plate}.pdf";
@@ -78,6 +94,8 @@ namespace AutomatizacionMultas.classes.bots
 
             File.Move(pdfPath, finalPath);
         }
+
+        /* ===================== LECTURA/EXTRACCIÓN ===================== */
 
         private string ReadPdfText(string path, bool firstPageOnly)
         {
@@ -112,6 +130,63 @@ namespace AutomatizacionMultas.classes.bots
             return m2.Success ? m2.Value : null;
         }
 
+        // *** EXTRACTOR ESPECÍFICO BENALMÁDENA ***
+        private string? FindPlateBenalmadena(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+
+            // 1) Normaliza: sin tildes, mayúsculas, conserva espacios
+            string norm = RemoveDiacriticsKeepSpaces(text).ToUpperInvariant();
+
+            // 2) Busca por líneas la etiqueta “MATRICULA” y extrae en la misma línea
+            foreach (var raw in Regex.Split(norm, @"\r?\n"))
+            {
+                var line = Regex.Replace(raw, @"\s+", " ");
+                if (line.Contains("MATRICULA"))
+                {
+                    var m = Regex.Match(line, @"\b\d{4}\s*[-]?\s*[BCDFGHJKLMNPRSTVWXYZ]{3}\b");
+                    if (m.Success) return Regex.Replace(m.Value, @"[^A-Z0-9]", "");
+                }
+            }
+
+            // 3) Ventana alrededor de la primera “MATRICULA”, tolerante a separadores raros
+            int idx = norm.IndexOf("MATRICULA", StringComparison.Ordinal);
+            if (idx >= 0)
+            {
+                int start = Math.Max(0, idx - 120);
+                string window = norm.Substring(start, Math.Min(800, norm.Length - start));
+                var soft = Regex.Match(window,
+                    @"\d\s*[-]?\s*\d\s*[-]?\s*\d\s*[-]?\s*\d\s*[-]?\s*[BCDFGHJKLMNPRSTVWXYZ]\s*[-]?\s*[BCDFGHJKLMNPRSTVWXYZ]\s*[-]?\s*[BCDFGHJKLMNPRSTVWXYZ]");
+                if (soft.Success)
+                {
+                    string compact = Regex.Replace(soft.Value, @"[^A-Z0-9]", "");
+                    if (Regex.IsMatch(compact, @"^\d{4}[BCDFGHJKLMNPRSTVWXYZ]{3}$"))
+                        return compact;
+                }
+            }
+
+            // 4) Fallback global estricto (texto compactado)
+            string compactAll = Regex.Replace(norm, @"[^A-Z0-9]", "");
+            var m3 = Regex.Match(compactAll, @"\d{4}[BCDFGHJKLMNPRSTVWXYZ]{3}");
+            return m3.Success ? m3.Value : null;
+        }
+
+        /* ===================== HELPERS ===================== */
+
+        // Quita diacríticos pero conserva espacios
+        private static string RemoveDiacriticsKeepSpaces(string? s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return "";
+            var formD = s.Normalize(NormalizationForm.FormD);
+            var sb = new StringBuilder(formD.Length);
+            foreach (var ch in formD)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+                    sb.Append(ch);
+            }
+            return sb.ToString().Normalize(NormalizationForm.FormC);
+        }
+
         private string NormalizeAggressively(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return "";
@@ -126,5 +201,13 @@ namespace AutomatizacionMultas.classes.bots
         private bool IsExcludedOrganism(string org) =>
             Config.SaveOptions.ExcludedPdfStarts.Any(pref =>
                 NormalizeAggressively(org).Contains(NormalizeAggressively(pref)));
+
+        // Detector robusto de “Benalmádena”
+        private bool IsBenalmadena(string org)
+        {
+            var s = RemoveDiacriticsKeepSpaces(org ?? "").ToUpperInvariant();
+            s = Regex.Replace(s, @"\s+", "");
+            return s.StartsWith("BENALMADENA");
+        }
     }
 }

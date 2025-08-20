@@ -100,10 +100,19 @@ namespace AutomatizacionMultas.classes.bots
                     string? extractedPdf = ExtractZip(finalZipPath);
                     if (extractedPdf is null) { i++; continue; }
 
+                    // ---------- Renombrar ----------
                     if (!IsExcludedOrganism(organismo))
-                        TryRenamePdfByContent(extractedPdf);
+                    {
+                        if (IsBenalmadena(organismo))
+                            TryRenamePdfByContentBenalmadena(extractedPdf);
+                        else
+                            TryRenamePdfByContent(extractedPdf);
+                    }
                     else
+                    {
                         Console.WriteLine($"📄 [{Path.GetFileName(extractedPdf)}] OCR omitido (organismo excluido).");
+                    }
+
 
                     Console.WriteLine($"✅ PDF listo: {Path.GetFileName(extractedPdf)}");
                     HumanPause(600, 1200);

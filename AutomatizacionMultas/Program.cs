@@ -68,6 +68,7 @@ internal class Program
                 services.AddSingleton<IMultaExtractor, DgtExtractor>();
                 services.AddSingleton<IMultaExtractor, MalagaExtractor>();
                 services.AddSingleton<IMultaExtractor, FuengirolaExtractor>();
+                services.AddSingleton<IMultaExtractor, BenalmadenaExtractor>();
                 services.AddSingleton<MultaPipeline>();
             })
             .ConfigureLogging(b => b.ClearProviders().AddSimpleConsole(o =>
