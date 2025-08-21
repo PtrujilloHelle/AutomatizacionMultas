@@ -4,6 +4,8 @@ using OpenQA.Selenium.Support.UI;
 using System;
 using System.Globalization;
 using System.Linq;
+// usar helper compartido de fecha:
+using static AutomatizacionMultas.classes.bots.DescargaDeMultas_ParseFixedDateHelper;
 
 namespace AutomatizacionMultas.classes.bots
 {
@@ -90,22 +92,6 @@ namespace AutomatizacionMultas.classes.bots
             hastaInput.SendKeys(Keys.Enter);
 
             HumanPause(1400, 2000);
-        }
-
-        private static string ParseFixedDate(string? raw)
-        {
-            raw = raw?.Trim();
-            if (string.IsNullOrEmpty(raw))
-                return DateTime.Today.ToString("dd/MM/yyyy");
-
-            if (DateTime.TryParseExact(raw, "dd/MM/yyyy", null,
-                                       DateTimeStyles.None, out var dt))
-                return dt.ToString("dd/MM/yyyy");
-
-            if (DateTime.TryParse(raw, out dt))
-                return dt.ToString("dd/MM/yyyy");
-
-            return DateTime.Today.ToString("dd/MM/yyyy");
         }
     }
 }

@@ -15,6 +15,8 @@ using System.Threading.Tasks;
 // 👇 NUEVO
 using System.Text.Json;
 using Cookie = OpenQA.Selenium.Cookie;
+// 👇 NUEVO: utilidades compartidas
+using AutomatizacionMultas.classes.utils;
 
 namespace AutomatizacionMultas.classes
 {
@@ -32,12 +34,9 @@ namespace AutomatizacionMultas.classes
         {
             Config = cfg ?? throw new ArgumentNullException(nameof(cfg));
 
-            // Usa el timeout de configuración si es > 0, si no usa el parámetro por defecto.
             var cfgTimeout = cfg.SeleniumOptions != null ? cfg.SeleniumOptions.DefaultTimeoutSec : defaultTimeoutSec;
             _defaultTimeoutSec = (cfgTimeout > 0) ? cfgTimeout : defaultTimeoutSec;
         }
-
-        /* ───────────── PUBLIC LIFECYCLE ───────────── */
 
         public async Task RunAsync()
         {
@@ -45,8 +44,6 @@ namespace AutomatizacionMultas.classes
             try { await ExecuteAsync(); }
             finally { await DisposeAsync(); }
         }
-
-        /* ───────────── DRIVER / OPTIONS ───────────── */
 
         protected virtual ChromeOptions BuildChromeOptions()
         {
@@ -56,7 +53,6 @@ namespace AutomatizacionMultas.classes
             opts.AddArgument("--disable-blink-features=AutomationControlled");
             opts.AddUserProfilePreference("plugins.always_open_pdf_externally", true);
 
-            /* --------- CARPETA DE DESCARGAS CONSISTENTE --------- */
             string? downloadDir = null;
 
             if (Config is DescargaDeMultasConfig dmCfg)
@@ -79,7 +75,6 @@ namespace AutomatizacionMultas.classes
             else
                 opts.AddArgument("--start-maximized");
 
-            // Opcional: flags útiles en Linux/CI
             if (OperatingSystem.IsLinux())
             {
                 opts.AddArgument("--no-sandbox");
@@ -94,13 +89,10 @@ namespace AutomatizacionMultas.classes
             var options = BuildChromeOptions();
             Driver = new ChromeDriver(options);
             Wait = new WebDriverWait(Driver, TimeSpan.FromSeconds(_defaultTimeoutSec));
-            Driver.Manage().Timeouts().ImplicitWait = TimeSpan.Zero; // recomendado
+            Driver.Manage().Timeouts().ImplicitWait = TimeSpan.Zero;
         }
 
-        /* ───────────── ABSTRACT ───────────── */
         protected abstract Task ExecuteAsync();
-
-        /* ───────────── HELPERS ───────────── */
 
         public void HumanPause(int min, int max) => Thread.Sleep(Rnd.Next(min, max));
 
@@ -146,14 +138,9 @@ namespace AutomatizacionMultas.classes
             catch { return false; }
         }
 
-        public string SanitizeFileName(string name)
-        {
-            var invalid = Path.GetInvalidFileNameChars();
-            var clean = string.Concat(name.Select(ch => invalid.Contains(ch) ? '_' : ch));
-            return Regex.Replace(clean, @"\s+", " ").Trim();
-        }
+        // 🔁 Wrapper: mantenemos la firma anterior y delegamos en TextUtils
+        public string SanitizeFileName(string name) => TextUtils.SanitizeFileName(name);
 
-        /* ----- Evita colisiones de nombre ----- */
         protected static string EnsureUniquePath(string path)
         {
             string dir = Path.GetDirectoryName(path)!;
@@ -178,8 +165,7 @@ namespace AutomatizacionMultas.classes
             File.Move(src, dst);
         }
 
-        /* ───────────── COOKIES (NUEVO) ───────────── */
-
+        /* ───────────── COOKIES ───────────── */
         public record SerializableCookie
         {
             public string Name { get; init; } = "";
@@ -191,17 +177,12 @@ namespace AutomatizacionMultas.classes
             public SerializableCookie() { }
             public SerializableCookie(Cookie c)
             {
-                Name = c.Name;
-                Value = c.Value;
-                Domain = c.Domain;
-                Path = c.Path;
-                Expiry = c.Expiry;
+                Name = c.Name; Value = c.Value; Domain = c.Domain; Path = c.Path; Expiry = c.Expiry;
             }
 
             public Cookie ToSeleniumCookie() => new Cookie(Name, Value, Domain, Path, Expiry);
         }
 
-        /// <summary>Guarda todas las cookies actuales del dominio en un JSON.</summary>
         public void SaveCookies(string path)
         {
             try
@@ -218,7 +199,6 @@ namespace AutomatizacionMultas.classes
             }
         }
 
-        /// <summary>Carga cookies desde JSON para el dominio de baseUrl.</summary>
         public void LoadCookies(string path, string baseUrl)
         {
             try
@@ -229,7 +209,6 @@ namespace AutomatizacionMultas.classes
                     return;
                 }
 
-                // Navega al origen del dominio antes de inyectar
                 Driver.Navigate().GoToUrl(GetOrigin(baseUrl));
                 Driver.Manage().Cookies.DeleteAllCookies();
 
@@ -255,8 +234,6 @@ namespace AutomatizacionMultas.classes
             var uri = new Uri(url);
             return $"{uri.Scheme}://{uri.Host}";
         }
-
-        /* ───────────── DISPOSE ───────────── */
 
         public ValueTask DisposeAsync()
         {
