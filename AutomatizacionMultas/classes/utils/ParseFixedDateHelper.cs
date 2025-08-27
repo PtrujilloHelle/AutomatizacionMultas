@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Globalization;
 
-namespace AutomatizacionMultas.classes.bots
+namespace AutomatizacionMultas.classes.utils
 {
-    internal static class DescargaDeMultas_ParseFixedDateHelper
+    internal static class ParseFixedDateHelper
     {
         public static string ParseFixedDate(string? raw)
         {

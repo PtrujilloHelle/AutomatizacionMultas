@@ -15,7 +15,7 @@ namespace Obtenerarchivosdelamulta.Services;
 
 public sealed class MultaPipeline
 {
-    private readonly Obtenerarchivosdelamulta.Domain.PipelineOptions _opt; // ← totalmente calificado
+    private readonly Obtenerarchivosdelamulta.Domain.PipelineOptions _opt;
     private readonly PdfTextReader _reader;
     private readonly ContractRepository _repo;
     private readonly IEnumerable<IMultaExtractor> _extractors;
@@ -23,7 +23,7 @@ public sealed class MultaPipeline
     private readonly ILogger<MultaPipeline> _log;
 
     public MultaPipeline(
-        Obtenerarchivosdelamulta.Domain.PipelineOptions opt, // ← totalmente calificado
+        Obtenerarchivosdelamulta.Domain.PipelineOptions opt,
         PdfTextReader reader,
         ContractRepository repo,
         IEnumerable<IMultaExtractor> extractors,
@@ -38,19 +38,19 @@ public sealed class MultaPipeline
         _log = log;
     }
 
-    public Task RunAsync(CancellationToken ct)
+    public async Task RunAsync(CancellationToken ct)
     {
         if (!Directory.Exists(_opt.InputDir))
         {
             _log.LogError("La carpeta de entrada no existe: {Dir}", _opt.InputDir);
-            return Task.CompletedTask;
+            return;
         }
 
         var pdfs = Directory.EnumerateFiles(_opt.InputDir, "*.pdf", SearchOption.TopDirectoryOnly).ToList();
         if (pdfs.Count == 0)
         {
             _log.LogWarning("No se encontraron PDFs en {Dir}", _opt.InputDir);
-            return Task.CompletedTask;
+            return;
         }
 
         Console.WriteLine("matricula,fecha,hora,archivo");
@@ -66,7 +66,7 @@ public sealed class MultaPipeline
 
                 var (fullText, lines) = _reader.Read(pdfPath);
 
-                // 1) Intento de extracción de fecha/hora (sin abortar si falla)
+                // 1) Intento de extracción de fecha/hora
                 (string date, string time) dt = ("", "");
                 var extractor = _extractors.FirstOrDefault(e => e.CanHandle(fileName));
                 bool extracted = extractor != null && extractor.TryExtract(fullText, lines, out dt);
@@ -84,55 +84,48 @@ public sealed class MultaPipeline
                 var hora = TryParseTime(dt.time);
 
                 // 2) Consulta SQL solo si hay fecha y hora válidas
-                List<ContractMatch> matches = new();
-                bool sePuedeConsultar = fecha.HasValue && hora.HasValue;
-                if (sePuedeConsultar)
+                ContractMatch? match = null;
+                if (fecha.HasValue && hora.HasValue)
                 {
-                    matches = _repo.QueryExact(matricula, fecha!.Value, hora!.Value).ToList();
-                    if (!matches.Any())
+                    match = await _repo.QueryExactSingleAsync(matricula, fecha.Value, hora.Value, ct);
+
+                    if (match is null)
                     {
                         Console.WriteLine("  > (sin coincidencias)");
                     }
                     else
                     {
-                        int i = 0;
-                        foreach (var m in matches)
-                        {
-                            i++;
-                            Console.WriteLine($"  > Match {i}: Suc={m.Sucursal}, Cliente={m.CodCliente}");
-                        }
+                        Console.WriteLine($"  > Match: Suc={match.Value.Sucursal}, Cliente={match.Value.CodCliente}");
                     }
                 }
                 else
                 {
-                    // Aviso en log, pero continuamos a crear carpeta con marcadores “sin fecha/hora”
                     _log.LogWarning("No hay fecha y/o hora válidas para {File}. Se creará carpeta con marcadores.", fileName);
                 }
 
                 // 3) Elección (si hay) y copia de contrato
-                var contratoNoEncontrado = !matches.Any();
+                var contratoNoEncontrado = match is null;
                 FileInfo? contrato = null;
-                if (matches.Any())
+                if (match is not null)
                 {
-                    var chosen = matches.First();
-                    contrato = _files.FindNewestBySucursal(chosen.Sucursal);
+                    contrato = _files.FindNewestBySucursal(match.Value.Sucursal);
                     if (contrato is null)
                     {
-                        _log.LogWarning("Contrato no encontrado para sucursal {Sucursal}", chosen.Sucursal);
+                        _log.LogWarning("Contrato no encontrado para sucursal {Sucursal}", match.Value.Sucursal);
                         contratoNoEncontrado = true;
                     }
                 }
 
-                // 4) Crear carpeta de salida con todas las reglas
+                // 4) Crear carpeta de salida
                 var destDir = _files.EnsureOutputFolder(
                     matricula,
                     fecha,
                     hora,
                     contratoNoEncontrado,
-                    dupSuffix  // p.ej. "_2"
+                    dupSuffix
                 );
 
-                // 5) Copiar siempre el PDF de la multa
+                // 5) Copiar siempre el PDF
                 _files.CopyIfExists(pdfPath, destDir);
 
                 // 6) Copiar contrato si existe
@@ -147,16 +140,8 @@ public sealed class MultaPipeline
                 _log.LogError(ex, "[ERROR] {File}", fileName);
             }
         }
-
-        return Task.CompletedTask;
     }
 
-    /// <summary>
-    /// Extrae la matrícula (####AAA) y un posible sufijo duplicado "_2" del nombre de archivo.
-    /// Ej: "AYTO_9371MGF_2.pdf" → ("9371MGF", "_2")
-    ///    "AYTO_9371MGF.pdf"   → ("9371MGF", "")
-    /// Fallback: usa el trozo tras el último '_' como antes.
-    /// </summary>
     private static (string plate, string dupSuffix) ExtractPlateAndSuffix(string path)
     {
         var name = Path.GetFileNameWithoutExtension(path);
@@ -168,7 +153,6 @@ public sealed class MultaPipeline
             return (plate, dup);
         }
 
-        // Fallback al comportamiento previo (posible, pero no ideal)
         var i = name.LastIndexOf('_');
         var raw = (i >= 0 ? name[(i + 1)..] : name).Trim();
         return (raw, "");

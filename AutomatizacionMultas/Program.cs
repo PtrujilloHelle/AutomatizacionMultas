@@ -1,6 +1,4 @@
-﻿// Program.cs
-
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,7 +7,6 @@ using AutomatizacionMultas.classes.bots;
 using AutomatizacionMultas.classes.configs;
 using Microsoft.Extensions.Configuration;
 
-// ——— Imports del pipeline de “Obtenerarchivos…” (que ahora vive dentro de este proyecto)
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -26,7 +23,7 @@ internal class Program
         var configRoot = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .AddEnvironmentVariables() // por si sobreescribes credenciales con variables de entorno
+            .AddEnvironmentVariables()
             .Build();
 
         var descargaCfg = configRoot.GetSection("DescargaDeMultas")
@@ -43,14 +40,12 @@ internal class Program
         var connString = post.GetSection("ConnectionStrings")["Db"]
                             ?? throw new InvalidOperationException("PostProcess.ConnectionStrings:Db faltante");
 
-        // Carpeta del día generada por el paso 1 (dd/MM/yyyy -> dd-MM-yyyy)
-        string fechaFija = AutomatizacionMultas.classes.bots.DescargaDeMultas_ParseFixedDateHelper.ParseFixedDate(descargaCfg.SaveOptions.FixedDate);
+        string fechaFija = AutomatizacionMultas.classes.utils.ParseFixedDateHelper.ParseFixedDate(descargaCfg.SaveOptions.FixedDate);
         string fechaFolder = fechaFija.Replace('/', '-'); // ej. "12-08-2025"
         string inputDir = Path.Combine(outputRoot, fechaFolder);
 
         Console.WriteLine($"➡️ Iniciando post-proceso sobre: {inputDir}");
 
-        // Construimos un Host “ligero” para reusar DI/logging del pipeline ya existente
         var host = Host.CreateDefaultBuilder()
             .ConfigureServices(services =>
             {
@@ -58,7 +53,7 @@ internal class Program
                     inputDir: inputDir,
                     connectionString: connString,
                     contractsRoot: contractsRoot,
-                    outputRoot: Path.Combine(outputRoot, fechaFolder) // deja resultados dentro de la carpeta del día
+                    outputRoot: Path.Combine(outputRoot, fechaFolder)
                 );
 
                 services.AddSingleton(opt);

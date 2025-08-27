@@ -1,12 +1,7 @@
 ﻿//DescargaDeMultas.Table.cs
 using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
-using System;
-using System.Globalization;
-using System.Linq;
-// usar helper compartido de fecha:
-using static AutomatizacionMultas.classes.bots.DescargaDeMultas_ParseFixedDateHelper;
-
+using static AutomatizacionMultas.classes.utils.ParseFixedDateHelper;
 namespace AutomatizacionMultas.classes.bots
 {
     internal partial class DescargaDeMultas

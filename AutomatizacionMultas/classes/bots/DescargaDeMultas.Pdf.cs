@@ -5,10 +5,10 @@ using System.Text;
 using System.Text.RegularExpressions;
 using OpenQA.Selenium;
 using UglyToad.PdfPig;
-using static AutomatizacionMultas.classes.bots.DescargaDeMultas_ParseFixedDateHelper;
+
 using AutomatizacionMultas.classes.utils;                   // PlateExtractor
 using static AutomatizacionMultas.classes.utils.TextUtils;  // normalizaciones
-
+using static AutomatizacionMultas.classes.utils.ParseFixedDateHelper;
 namespace AutomatizacionMultas.classes.bots
 {
     internal partial class DescargaDeMultas
