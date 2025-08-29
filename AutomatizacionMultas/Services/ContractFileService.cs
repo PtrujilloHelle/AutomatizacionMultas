@@ -1,4 +1,7 @@
 ﻿using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Linq;
 using Obtenerarchivosdelamulta.Domain;   // <-- importante
 
 namespace Obtenerarchivosdelamulta.Services;
@@ -78,5 +81,51 @@ public sealed class ContractFileService
         var destPath = Path.Combine(destDir.FullName, fileName);
         File.Copy(srcPath, destPath, overwrite: true);
         return new FileInfo(destPath);
+    }
+
+    /// <summary>
+    /// Crea el TXT:
+    /// - Si hay CodHOC -> "es hoc.txt" con 3 líneas (Numero contrato / Codigo cliente / Codigo HOC)
+    /// - Si NO hay CodHOC -> "no es hoc.txt" vacío.
+    /// </summary>
+    public FileInfo CreateHocNote(DirectoryInfo destDir, string codContrato, string codCliente, string? codHoc)
+    {
+        if (string.IsNullOrWhiteSpace(codHoc))
+        {
+            var pathNo = Path.Combine(destDir.FullName, "no es hoc.txt");
+            File.WriteAllText(pathNo, string.Empty, Encoding.UTF8); // vacío
+            return new FileInfo(pathNo);
+        }
+        else
+        {
+            var pathSi = Path.Combine(destDir.FullName, "es hoc.txt");
+            var sb = new StringBuilder();
+            sb.AppendLine($"Numero contrato: {codContrato}");
+            sb.AppendLine($"Codigo cliente: {codCliente}");
+            sb.AppendLine($"Codigo HOC: {codHoc}");
+            File.WriteAllText(pathSi, sb.ToString(), Encoding.UTF8);
+            return new FileInfo(pathSi);
+        }
+    }
+
+    /// <summary>
+    /// Crea un TXT vacío cuyo nombre es la nacionalidad (o "null" si viene vacía).
+    /// </summary>
+    public FileInfo CreateNationalityNote(DirectoryInfo destDir, string? nacionalidad)
+    {
+        string baseName = string.IsNullOrWhiteSpace(nacionalidad) ? "null" : nacionalidad.Trim();
+        baseName = SanitizeFileName(baseName);
+        var path = Path.Combine(destDir.FullName, $"{baseName}.txt");
+        File.WriteAllText(path, string.Empty, Encoding.UTF8); // contenido vacío; el valor va en el nombre
+        return new FileInfo(path);
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "null";
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
+        var clean = new string(chars);
+        return Regex.Replace(clean, @"\s+", " ").Trim();
     }
 }

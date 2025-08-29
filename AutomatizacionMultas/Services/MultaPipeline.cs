@@ -125,14 +125,38 @@ public sealed class MultaPipeline
                     dupSuffix
                 );
 
-                // 5) Copiar siempre el PDF
+                // 5) Copiar siempre el PDF de la multa
                 _files.CopyIfExists(pdfPath, destDir);
 
-                // 6) Copiar contrato si existe
+                // 6) Crear TXT de nacionalidad siempre que tengamos match (aunque no haya contrato)
+                if (match is not null)
+                {
+                    _files.CreateNationalityNote(destDir, match.Value.Nacionalidad);
+                }
+
+                // 7) Copiar contrato si existe (limpiando sufijos _1, _2 o (2) del nombre)
                 if (contrato is not null)
                 {
-                    _files.CopyIfExists(contrato.FullName, destDir);
-                    _log.LogInformation("Contrato {Contrato} copiado a {Destino}", contrato.Name, destDir.FullName);
+                    // Nombre limpio sin sufijos de duplicado antes de la extensión
+                    // Ejemplos a limpiar: "ABC123_1.pdf" -> "ABC123.pdf", "ABC123 (2).pdf" -> "ABC123.pdf"
+                    var cleanedContractName = Regex.Replace(
+                        contrato.Name,
+                        @"(_\d+|\s\(\d+\))(?=\.pdf$)",
+                        "",
+                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+                    );
+
+                    _files.CopyIfExists(contrato.FullName, destDir, cleanedContractName);
+                    _log.LogInformation("Contrato {Contrato} copiado a {Destino} como {Limpio}", contrato.Name, destDir.FullName, cleanedContractName);
+
+                    // 8) Crear TXT HOC (usando el nombre limpio como 'Numero contrato')
+                    if (match is not null)
+                    {
+                        string codContrato = Path.GetFileNameWithoutExtension(cleanedContractName);
+                        string codCliente = match.Value.CodCliente;
+                        string? codHoc = match.Value.CodHOC; // puede ser null si no es HOC o si el SP no lo devuelve
+                        _files.CreateHocNote(destDir, codContrato, codCliente, codHoc);
+                    }
                 }
             }
             catch (Exception ex)

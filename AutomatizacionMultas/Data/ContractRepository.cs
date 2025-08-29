@@ -34,10 +34,27 @@ public sealed class ContractRepository
             {
                 if (await r.ReadAsync(ct))
                 {
-                    return new ContractMatch(
-                        r["Sucursal"]?.ToString() ?? "",
-                        r["CodCliente"]?.ToString() ?? ""
-                    );
+                    string suc = r["Sucursal"]?.ToString() ?? "";
+                    string codCliente = r["CodCliente"]?.ToString() ?? "";
+
+                    // CodHOC y Nacionalidad pueden no existir en versiones antiguas del SP → lectura defensiva
+                    string? codHoc = null;
+                    try
+                    {
+                        var v = r["CodHOC"];
+                        codHoc = v == DBNull.Value ? null : v?.ToString();
+                    }
+                    catch { /* columna no existe */ }
+
+                    string? nacionalidad = null;
+                    try
+                    {
+                        var v = r["Nacionalidad"];
+                        nacionalidad = v == DBNull.Value ? null : v?.ToString();
+                    }
+                    catch { /* columna no existe */ }
+
+                    return new ContractMatch(suc, codCliente, codHoc, nacionalidad);
                 }
             }
         }
@@ -46,4 +63,5 @@ public sealed class ContractRepository
     }
 }
 
-public readonly record struct ContractMatch(string Sucursal, string CodCliente);
+// AHORA incluye CodHOC (nullable) y Nacionalidad (nullable)
+public readonly record struct ContractMatch(string Sucursal, string CodCliente, string? CodHOC, string? Nacionalidad);
